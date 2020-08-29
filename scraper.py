@@ -116,7 +116,11 @@ for bib in bibs:
             break
         except NoSuchElementException:
             
-            time.sleep(2)
+            time.sleep(10)
+            browser2.get(f"https://www.athlinks.com/event/18578/results/Event/901227/Course/1763149/Bib/{bib}")
+            time.sleep(10)
+
+
             
     
     
