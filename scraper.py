@@ -80,9 +80,9 @@ results_dict = {"Bib":[],
 
 # iterate over the list of bibs and make requests
 x = 0
-for chunk in chunks[:3]:
+for chunk in chunks:
     x += 1
-    for bib in chunk[:3]:
+    for bib in chunk:
         
         browser2.get(f"https://www.athlinks.com/event/18578/results/Event/901227/Course/1763149/Bib/{bib}")
         
