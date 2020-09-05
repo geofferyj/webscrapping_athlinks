@@ -1,186 +1,108 @@
-# import selenium for webscrapping 
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
-from selenium.webdriver.common.keys import Keys
+from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
+import csv
+import pytz
+from datetime import datetime as d, timedelta
+import requests
 
-# import other utility modules
-import time, os, re, pandas as pd
-
-
-print("---------------------------- BEGIN PROCESSING ----------------------------")
-
-
-# set options for the chrome driver 
-options = webdriver.ChromeOptions()
-options.add_argument('--incognito')
-options.add_argument('--headless')
-options.add_argument("--start-maximized")
-options.add_argument('window-size=2560,1440')
-
-# open a headless browser with chrome driver in current directory
-browser = webdriver.Chrome("./chromedriver84", options=options)
-
-# set delay on browser to allow page load data
-browser.implicitly_wait(10)
-
-# make request to the results page
-browser.get("https://www.athlinks.com/event/18578/results/Event/901227/Course/1763149/Results")
-
-# store page source in this variable
-source = ""
-x = 0
-while True:
-    x += 1
-    
-    # pause for additional 5 seconds to make sure page has loaded completely
-    time.sleep(5)
-    
-    source += browser.page_source
-    print(f"copied page {x}")
-    
-    # try to find next button 
-    # if found:  
-    try:
-        
-        # find the button
-        next_button = browser.find_element_by_xpath('//button[text()=">"]')
-        
-        # click it
-        browser.execute_script("arguments[0].click();", next_button)
-    except NoSuchElementException:
-        # if not found (i.e at the last page)
-        # break out of (exit) the loop
-        break
-
-# close the browser
-browser.quit()
-
-# find and extract all bibs from page source
-bibs = re.findall("(?<=/event/18578/results/Event/901227/Course/1763149/Bib/)\d+", source)
-print(len(bibs))
-
-chunks = [bibs[x:x+50] for x in range(0, len(bibs), 50)]
+est = pytz.timezone("US/Eastern")
+NUMBER_OF_ENTRIES: int = 7476  # 596
+eventCourseId = 1723361  # 1763149
+eventId = 891887  # 901227
+fieldnames = []
+result_file = open(f"{eventId}_{eventCourseId}.csv", "a+", newline="")
+writer = csv.DictWriter(result_file, fieldnames=fieldnames)
 
 
-# open another browser
-browser1 = webdriver.Chrome("./chromedriver", options=options)
-browser2 = webdriver.Chrome("./chromedriver", options=options)
-browser3 = webdriver.Chrome("./chromedriver", options=options)
-browser4 = webdriver.Chrome("./chromedriver", options=options)
-browser5 = webdriver.Chrome("./chromedriver", options=options)
-browser6 = webdriver.Chrome("./chromedriver", options=options)
-browser7 = webdriver.Chrome("./chromedriver", options=options)
-browser8 = webdriver.Chrome("./chromedriver", options=options)
-browser9 = webdriver.Chrome("./chromedriver", options=options)
-browser10 = webdriver.Chrome("./chromedriver", options=options)
-browser11 = webdriver.Chrome("./chromedriver", options=options)
-browser12 = webdriver.Chrome("./chromedriver", options=options)
-
-browsers = [browser1,browser2,browser3,browser4,browser5,browser6,browser7,browser8,browser9,browser10,browser11,browser12]
-
-print(len(browsers), len(chunks), len(range(len(browsers))))
+def from_millis_to_hms(millis: int) -> str:
+    if millis > 0:
+        return str(timedelta(milliseconds=millis))
+    else:
+        return "--:--:--"
 
 
-# iterate over the list of bibs and make requests
+def page_request(page):
+    params = {"eventCourseId": eventCourseId,
+              "from": page,
+              "limit": 100
+              }
+    while True:
+        r = requests.get(f"https://results.athlinks.com/event/{eventId}", params=params)
 
-def thread_func(browser, x, chunk):
-    print(f"---------------------------- BEGIN PROCESSING FOR CHUNK {x} ----------------------------")
-    # dictionary to hold data for each participant
-    results_dict = {"Bib":[],
-               "Name":[],
-               "Gender":[],
-               "City/State":[],
-               "Chip Start Time":[],
-               "Gun Time":[],
-               "10K Time":[],
-               "Half Time":[],
-               "30K Time":[],
-               "Full Course Time":[]}
-    
-    browser.implicitly_wait(6)
-    
-    for bib in chunk:
-        
-        browser.get(f"https://www.athlinks.com/event/18578/results/Event/901227/Course/1763149/Bib/{bib}")
-        
-    
-        # select the name of participant from page
-        name = browser.find_element_by_id("athlete-profile-link")
-        
-        # select the gender of participant from page
-        gender = browser.find_element_by_id("ageGender")
-        
-        # select the city/state of participant from page
-        city_state = browser.find_element_by_id("IRPUserLocation")
-        
-        # select the chip start time of participant from page
-        chip_start_time = browser.find_element_by_xpath('//div[text()="Chip Start Time"]/following-sibling::div[1]')
-        
-        # select the gun time of participant from page
-        gun_time = browser.find_element_by_xpath('//div[text()="Gun time"]/following-sibling::div[1]')
-        
-        # select the 10K time of participant from page
-        _10k = browser.find_element_by_xpath('//div[text()="10K"]/following-sibling::div[last()]')
-        
-        # select the half time of participant from page
-        half = browser.find_element_by_xpath('//div[text()="HALF"]/following-sibling::div[last()]')
-        
-        # select the 30K time of participant from page
-        _30k = browser.find_element_by_xpath('//div[text()="30K"]/following-sibling::div[last()]')
-        
-        # select the full course time of participant from page
-        full_course = browser.find_element_by_xpath('//div[text()="Full Course"]/following-sibling::div[last()]')            
-        
-    
-        # -------- create entry for participant in results_dict
-        results_dict["Bib"].append(bib)
-        results_dict["Name"].append(name.text)
-        results_dict["Gender"].append(gender.text[0])
-        results_dict["City/State"].append(city_state.text)
-        results_dict["Chip Start Time"].append(chip_start_time.text)
-        results_dict["Gun Time"].append(gun_time.text)
-        results_dict["10K Time"].append(_10k.text)
-        results_dict["Half Time"].append(half.text)
-        results_dict["30K Time"].append(_30k.text)
-        results_dict["Full Course Time"].append(full_course.text)
-        
-        
-        print(f"---> Entry for {name.text} created in chuck {x}")
+        if r.status_code == 200:
+            print(r.url, "--------> ", "succeeded with code:", r.status_code)
+            return r.json()[0]["interval"]["intervalResults"]
+        else:
+            pass
+            print(r.url, "--------> ", "failed with code:", r.status_code)
 
-    # close second browser
-    browser.quit()
 
-    # convert results dict to a panda dataframe
-    df = pd.DataFrame(results_dict)
+def get_bibs():
+    pages = range(0, NUMBER_OF_ENTRIES, 100)
+    with ThreadPoolExecutor() as e:
+        futures_list = [e.submit(page_request, page) for page in pages]
+        json_list = [y for x in [x.result() for x in as_completed(futures_list)] for y in x]
 
-    # convert pandas dataframe to a csv file 
-    df.to_csv(f"result/times_{x}.csv", index=False)
+    return [x["bib"] for x in json_list]
 
-    print(f"---------------------------- END OF PROCESSING FOR CHUNK {x} ----------------------------")
-    
+
+def get_participant_data(bib):
+    global fieldnames
+    global writer
+
+    params = {"bib": bib,
+              "eventId": eventId,
+              "eventCourseId": eventCourseId,
+              }
+
+    while True:
+        data = requests.get("https://results.athlinks.com/individual", params=params)
+        if data.status_code == 200:
+            print(data.url, "--------> ", "succeeded with code:", data.status_code)
+            r = data.json()
+            break
+        else:
+            print(data.url, "--------> ", "failed with code:", data.status_code)
+
+    name = r.get("displayName", "")
+    gender = r.get("gender", "")
+    city_state = f"{r.get('region', '')} {r.get('regionId', '')}"
+    chip_start_time_int = int(r.get("racerStartTime", {}).get("timeInMillis", "0"))
+    chip_start_time = f"{d.fromtimestamp(chip_start_time_int / 1000.0, est):%-I:%M:%S %p EST}"
+
+    row = {"Bib": bib,
+           "Name": name,
+           "Gender": gender,
+           "City/State": city_state,
+           "Chip Start Time": chip_start_time,
+           "Gun Time": ""}
+
+    for interval in r.get("intervals", []):
+        name = f'{interval.get("intervalName", "")} Time'
+        value = int(interval.get("chipTime", {}).get("timeInMillis"))
+        if name[:-5] == "Full Course":
+            row["Gun Time"] = from_millis_to_hms(int(interval.get("gunTime", {}).get("timeInMillis")))
+
+        row[name] = from_millis_to_hms(value)
+
+    if not fieldnames:
+        fieldnames = list(row.keys())
+    writer = csv.DictWriter(result_file, fieldnames=fieldnames)
+    writer.writerow(row)
+
+
+print("Collecting Bibs ...")
+
+bibs = get_bibs()
+
+print("Bibs Collection Finished")
+
+print("Getting participant data ...")
+
 #  Added concurrency for performance boost
 with ThreadPoolExecutor() as executor:
-    
-    [executor.submit(thread_func, b,x, chunk) for (b, x, chunk) in zip(browsers[0:3], range(len(browsers))[0:3], chunks[0:3])]
+    [executor.submit(get_participant_data, bib) for bib in bibs]
 
-
-with ThreadPoolExecutor() as executor:
-    
-    [executor.submit(thread_func, b,x, chunk) for (b, x, chunk) in zip(browsers[3:6], range(len(browsers))[3:6], chunks[3:6])]
-
-
-with ThreadPoolExecutor() as executor:
-    
-    [executor.submit(thread_func, b,x, chunk) for (b, x, chunk) in zip(browsers[6:9], range(len(browsers))[6:9], chunks[6:9])]
-
-
-with ThreadPoolExecutor() as executor:
-    
-    executor.submit(thread_func, browsers[11], range(len(browsers))[11], chunks[11])
-
-
-# concatenate all chucks into one file
-df_list = os.listdir("result")
-result_frame = pd.concat((pd.read_csv(f"result/{f}") for f in df_list))
-result_frame.to_csv("data.csv", index=False)
+writer.writeheader()
+result_file.close()
+print("Process Completed Successfully")

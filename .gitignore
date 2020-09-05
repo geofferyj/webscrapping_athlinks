@@ -1,2 +1,4 @@
 venv
 testf.py
+.idea
+.vscode
