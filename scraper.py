@@ -10,7 +10,7 @@ NUMBER_OF_ENTRIES: int = 7476  # 596
 eventCourseId = 1723361  # 1763149
 eventId = 891887  # 901227
 fieldnames = []
-result_file = open(f"{eventId}_{eventCourseId}.csv", "a+", newline="")
+result_file = open(f"{eventId}_{eventCourseId}.csv", "w+", newline="")
 writer = csv.DictWriter(result_file, fieldnames=fieldnames)
 
 
